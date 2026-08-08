@@ -1,0 +1,19 @@
+{
+  "name": "stickman_ai",
+  "version": "1.0.0",
+  "description": "2 Player stickman game custom made plus an training a model to play the game until it can beat me 10 times in a row.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/xheah/stickman_ai.git"
+  },
+  "keywords": [],
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/xheah/stickman_ai/issues"
+  },
+  "homepage": "https://github.com/xheah/stickman_ai#readme"
+}
