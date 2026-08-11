@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="A local two-player stickman wrestling game." />
+    <title>Wrestle 2D</title>
+    <style>
+      :root { color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, sans-serif; background: #11131a; color: #f5f7ff; }
+      * { box-sizing: border-box; }
+      body { min-width: 320px; min-height: 100vh; margin: 0; display: grid; place-items: center; background: radial-gradient(circle at 50% 0%, #293557 0%, transparent 45%), #11131a; }
+      button { font: inherit; }
+      .game-shell { width: min(100%, 1280px); padding: clamp(.75rem, 2vw, 1.5rem); }
+      .game-header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: .75rem; }
+      .game-title { margin: 0; font-size: clamp(1.25rem, 3vw, 2rem); letter-spacing: .08em; text-transform: uppercase; }
+      .game-status { margin: 0; color: #b8c4e4; font-size: .9rem; }
+      .arena { position: relative; overflow: hidden; border: 2px solid #526798; border-radius: .75rem; background: #171d2d; box-shadow: 0 1.5rem 4rem rgb(0 0 0 / 35%); }
+      #game-canvas { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; background: #202a43; }
+      .hud { position: absolute; inset: 0; pointer-events: none; padding: clamp(.75rem, 2vw, 1.5rem); display: flex; justify-content: space-between; }
+      .player-card { width: min(35%, 18rem); }
+      .player-card--right { text-align: right; }
+      .player-name { display: block; font-size: clamp(.8rem, 2vw, 1rem); font-weight: 800; text-transform: uppercase; }
+      .health-bar { height: .8rem; margin-top: .4rem; overflow: hidden; border: 2px solid #0a0c12; border-radius: 999px; background: #0d1019; }
+      .health-bar__value { height: 100%; width: 100%; background: linear-gradient(90deg, #62d26f, #c7ec59); transition: width 150ms ease; }
+      .player-card--right .health-bar__value { margin-left: auto; background: linear-gradient(90deg, #ffcf5a, #ff6363); }
+      .overlay { position: absolute; inset: 0; display: grid; place-items: center; padding: 1rem; background: rgb(8 10 17 / 64%); }
+      .overlay[hidden] { display: none; }
+      .panel { width: min(100%, 32rem); padding: clamp(1.25rem, 4vw, 2.5rem); text-align: center; border: 1px solid #657caf; border-radius: 1rem; background: rgb(20 26 43 / 92%); box-shadow: 0 1rem 3rem rgb(0 0 0 / 30%); }
+      .panel h2 { margin: 0; font-size: clamp(1.75rem, 5vw, 3.25rem); text-transform: uppercase; }
+      .panel p { color: #c8d2ee; line-height: 1.5; }
+      .primary-button, .secondary-button { cursor: pointer; border: 0; border-radius: .5rem; padding: .75rem 1.25rem; font-weight: 800; }
+      .primary-button { color: #10131c; background: #8eea77; }
+      .secondary-button { color: #eef2ff; background: #334365; }
+      .controls { display: grid; grid-template-columns: repeat(2, 1fr); gap: .75rem; margin-top: 1rem; }
+      .control-card { padding: .75rem; border-radius: .5rem; background: #111827; color: #cbd5ef; font-size: .85rem; line-height: 1.55; }
+      kbd { display: inline-block; min-width: 1.75rem; padding: .1rem .35rem; border: 1px solid #6f82ad; border-radius: .25rem; background: #293657; color: white; font-family: inherit; text-align: center; }
+      .game-actions { display: flex; justify-content: flex-end; gap: .5rem; margin-top: .75rem; }
+      @media (max-width: 540px) { .game-header { align-items: flex-start; flex-direction: column; } .controls { grid-template-columns: 1fr; } }
+    </style>
+  </head>
+  <body>
+    <main class="game-shell">
+      <header class="game-header">
+        <h1 class="game-title">Wrestle 2D</h1>
+        <p id="game-status" class="game-status" aria-live="polite">Ready to fight</p>
+      </header>
+
+      <section class="arena" aria-label="Game arena">
+        <canvas id="game-canvas" width="1280" height="720">Your browser does not support the canvas element.</canvas>
+
+        <div class="hud" aria-label="Match status">
+          <section class="player-card" aria-label="Player one health">
+            <span class="player-name">Player 1</span>
+            <div class="health-bar"><div id="player-one-health" class="health-bar__value"></div></div>
+          </section>
+          <section class="player-card player-card--right" aria-label="Player two health">
+            <span class="player-name">Player 2</span>
+            <div class="health-bar"><div id="player-two-health" class="health-bar__value"></div></div>
+          </section>
+        </div>
+
+        <div id="start-overlay" class="overlay">
+          <div class="panel">
+            <h2>Wrestle 2D</h2>
+            <p>Use the controls below to begin. The canvas and game loop are ready for your fighters, physics, and combat rules.</p>
+            <button id="start-button" class="primary-button" type="button">Start match</button>
+            <div class="controls">
+              <div class="control-card"><strong>Player 1</strong><br /><kbd>A</kbd> <kbd>D</kbd> move · <kbd>W</kbd> jump · <kbd>F</kbd> attack</div>
+              <div class="control-card"><strong>Player 2</strong><br /><kbd>←</kbd> <kbd>→</kbd> move · <kbd>↑</kbd> jump · <kbd>/</kbd> attack</div>
+            </div>
+          </div>
+        </div>
+
+        <div id="pause-overlay" class="overlay" hidden>
+          <div class="panel">
+            <h2>Paused</h2>
+            <p>Press <kbd>Escape</kbd> or choose resume to continue.</p>
+            <button id="resume-button" class="primary-button" type="button">Resume</button>
+          </div>
+        </div>
+      </section>
+
+      <div class="game-actions">
+        <button id="pause-button" class="secondary-button" type="button">Pause</button>
+        <button id="reset-button" class="secondary-button" type="button">Reset match</button>
+      </div>
+    </main>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
