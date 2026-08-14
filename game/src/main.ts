@@ -1,5 +1,35 @@
 type GameState = "ready" | "playing" | "paused";
 
+type Player = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  color: string;
+  velocityX: number;
+  velocityY: number;
+  health: number;
+  onGround: boolean;
+}
+
+
+const keysPressed = new Set<string>();
+
+window.addEventListener("keydown", (event) => {
+  keysPressed.add(event.key.toLowerCase());
+
+  if (
+    ["a", "d", "w", "arrowleft", "arrowright", "arrowup"].includes(key)
+  ) {
+    event.preventDefault();
+  }
+})
+
+window.addEventListener("keyup", (event) => {
+  keysPressed.delete(event.key.toLowerCase());
+})
+
+
 const canvas = document.querySelector<HTMLCanvasElement>("#game-canvas");
 const startOverlay = document.querySelector<HTMLElement>("#start-overlay");
 const pauseOverlay = document.querySelector<HTMLElement>("#pause-overlay");
@@ -8,6 +38,30 @@ const startButton = document.querySelector<HTMLButtonElement>("#start-button");
 const resumeButton = document.querySelector<HTMLButtonElement>("#resume-button");
 const pauseButton = document.querySelector<HTMLButtonElement>("#pause-button");
 const resetButton = document.querySelector<HTMLButtonElement>("#reset-button");
+
+const playerOne: Player = {
+  x: 250,
+  y: canvas.height * 0.78 - 100,
+  width: 50,
+  height: 100,
+  color: "#f37872",
+  velocityX: 0,
+  velocityY: 0,
+  health: 100,
+  onGround: true,
+};
+
+const playerTwo: Player = {
+  x: 950,
+  y: canvas.height * 0.78 - 100,
+  width: 50,
+  height: 100,
+  color: "#7baeea",
+  velocityX: 0,
+  velocityY: 0,
+  health: 100,
+  onGround: true,
+};
 
 if (!canvas || !startOverlay || !pauseOverlay || !status || !startButton || !resumeButton || !pauseButton || !resetButton) {
   throw new Error("The game page is missing a required element.");
@@ -34,6 +88,69 @@ function updateInterface(): void {
     paused: "Match paused",
   }[state];
 }
+
+function drawPlayer(player: Player): void {
+  context.fillStyle = player.color;
+  context.fillRect(player.x, player.y, player.width, player.height);
+}
+
+const floorY = canvas.height * 0.78;
+const gravity = 0.7;
+const jumpStrength = -16;
+
+function updatePlayerPhysics(player: Player): void {
+  player.x = Math.max(0, Math.min(canvas.width - player.width, player.x));
+  
+  player.velocityY += gravity;
+
+  player.y += player.velocityY;
+  
+  const playerFloorY = floorY - player.height;
+ 
+  if (player.y >= playerFloorY) {
+    player.y = playerFloorY;
+    player.velocityY = 0;
+    player.onGround = true;
+  }
+}
+
+function updatePlayers(): void {
+  const speed = 6;
+
+  // Player 1: left/right movement
+  if (keysPressed.has("a")) {
+    playerOne.x -= speed;
+  }
+
+  if (keysPressed.has("d")) {
+    playerOne.x += speed;
+  }
+
+  // Player 1: jump only when standing on the ground
+  if (keysPressed.has("w") && playerOne.onGround) {
+    playerOne.velocityY = jumpStrength;
+    playerOne.onGround = false;
+  }
+
+  // Player 2: left/right movement
+  if (keysPressed.has("arrowleft")) {
+    playerTwo.x -= speed;
+  }
+
+  if (keysPressed.has("arrowright")) {
+    playerTwo.x += speed;
+  }
+
+  // Player 2: jump only when standing on the ground
+  if (keysPressed.has("arrowup") && playerTwo.onGround) {
+    playerTwo.velocityY = jumpStrength;
+    playerTwo.onGround = false;
+  }
+
+  updatePlayerPhysics(playerOne);
+  updatePlayerPhysics(playerTwo);
+}
+
 
 function drawArena(): void {
   const { width, height } = canvas;
@@ -64,14 +181,15 @@ function drawArena(): void {
   context.fillText("Arena ready", width / 2, height / 2);
   context.font = "18px system-ui";
   context.fillText("Add fighters and gameplay in src/main.ts", width / 2, height / 2 + 36);
+  drawPlayer(playerOne);
+  drawPlayer(playerTwo);
 }
 
 function gameLoop(timestamp: number): void {
   const deltaTime = timestamp - lastFrameTime;
   lastFrameTime = timestamp;
 
-  // Add game updates here, e.g. updatePlayers(deltaTime).
-  void deltaTime;
+  updatePlayers();
   drawArena();
 
   if (state === "playing") {
