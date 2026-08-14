@@ -10,6 +10,7 @@ type Player = {
   velocityY: number;
   health: number;
   onGround: boolean;
+  facing: 1 | -1;
 }
 
 
@@ -49,6 +50,7 @@ const playerOne: Player = {
   velocityY: 0,
   health: 100,
   onGround: true,
+  facing: 1,
 };
 
 const playerTwo: Player = {
@@ -61,6 +63,7 @@ const playerTwo: Player = {
   velocityY: 0,
   health: 100,
   onGround: true,
+  facing: -1,
 };
 
 if (!canvas || !startOverlay || !pauseOverlay || !status || !startButton || !resumeButton || !pauseButton || !resetButton) {
@@ -89,14 +92,101 @@ function updateInterface(): void {
   }[state];
 }
 
+function drawLimb(
+  startX: number,
+  startY: number,
+  endX: number,
+  endY: number,
+): void {
+  context.beginPath();
+  context.moveTo(startX, startY);
+  context.lineTo(endX, endY);
+  context.stroke();
+}
+
+
 function drawPlayer(player: Player): void {
+  const centerX = player.x + player.width / 2;
+
+  // These positions are relative to the player's invisible collision box.
+  const headY = player.y + 18;
+  const shoulderY = player.y + 38;
+  const hipY = player.y + 68;
+  const footY = player.y + player.height;
+
+  // Make limbs swing a little while moving.
+  const walking =
+    player.velocityX === 0
+      ? 0
+      : Math.sin(performance.now() * 0.012) * 12;
+  const legSwing = player.onGround ? walking : 0;
+  const armSwing = player.onGround ? -walking : 0;
+
+  context.save();
+
+  context.strokeStyle = player.color;
   context.fillStyle = player.color;
-  context.fillRect(player.x, player.y, player.width, player.height);
+  context.lineWidth = 8;
+  context.lineCap = "round";
+  context.lineJoin = "round";
+
+  // Head
+  context.beginPath();
+  context.arc(centerX, headY, 13, 0, Math.PI * 2);
+  context.fill();
+
+  // Body
+  context.beginPath();
+  context.moveTo(centerX, shoulderY);
+  context.lineTo(centerX, hipY);
+  context.stroke();
+
+  // Arms
+  drawLimb(
+    centerX,
+    shoulderY,
+    centerX + player.facing * (24 + armSwing),
+    shoulderY + 18,
+  );
+
+  drawLimb(
+    centerX,
+    shoulderY,
+    centerX - player.facing * (20 + armSwing),
+    shoulderY + 25,
+  );
+
+  // Legs
+  drawLimb(
+    centerX,
+    hipY,
+    centerX + player.facing * (20 + legSwing),
+    footY,
+  );
+
+  drawLimb(
+    centerX,
+    hipY,
+    centerX - player.facing * (20 + legSwing),
+    footY,
+  );
+
+  context.restore();
 }
 
 const floorY = canvas.height * 0.78;
 const gravity = 0.7;
 const jumpStrength = -16;
+
+function punch(attacker: Player, victim: Player): void {
+  // if playerOne is next to playerTwo and playerOne does a punch attack while facing player two,
+  // register as a hit with a punch animation and a decrease two playerTwo health
+  if (Math.abs(attacker.x - victim.x) < 10) {
+    if ((attacker.facing === 1 && attacker.x > victim.x) || attacker.facing === -1 && attacker.x < victim.x) {
+      victim.health -= 10;
+    }
+  }
+}
 
 function updatePlayerPhysics(player: Player): void {
   player.x = Math.max(0, Math.min(canvas.width - player.width, player.x));
@@ -117,13 +207,18 @@ function updatePlayerPhysics(player: Player): void {
 function updatePlayers(): void {
   const speed = 6;
 
+  playerOne.velocityX = 0;
+  playerTwo.velocityX = 0;
+
   // Player 1: left/right movement
   if (keysPressed.has("a")) {
-    playerOne.x -= speed;
+    playerOne.velocityX = -speed;
+    playerOne.facing = -1;
   }
 
   if (keysPressed.has("d")) {
-    playerOne.x += speed;
+    playerOne.velocityX = speed;
+    playerOne.facing = 1;
   }
 
   // Player 1: jump only when standing on the ground
@@ -132,20 +227,30 @@ function updatePlayers(): void {
     playerOne.onGround = false;
   }
 
-  // Player 2: left/right movement
-  if (keysPressed.has("arrowleft")) {
-    playerTwo.x -= speed;
+  // Player 1: punch the enemy
+  if (keysPressed.has("f")) {
+    punch(playerOne, playerTwo)
   }
 
-  if (keysPressed.has("arrowright")) {
-    playerTwo.x += speed;
+  // Player 2: left/right movement
+  if (keysPressed.has("j")) {
+    playerTwo.velocityX = -speed;
+    playerTwo.facing = -1;
+  }
+
+  if (keysPressed.has("l")) {
+    playerTwo.velocityX = speed;
+    playerTwo.facing = 1;
   }
 
   // Player 2: jump only when standing on the ground
-  if (keysPressed.has("arrowup") && playerTwo.onGround) {
+  if (keysPressed.has("i") && playerTwo.onGround) {
     playerTwo.velocityY = jumpStrength;
     playerTwo.onGround = false;
   }
+
+  playerOne.x += playerOne.velocityX;
+  playerTwo.x += playerTwo.velocityX;
 
   updatePlayerPhysics(playerOne);
   updatePlayerPhysics(playerTwo);
