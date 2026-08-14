@@ -1,4 +1,4 @@
-type GameState = "ready" | "playing" | "paused";
+type GameState = "ready" | "playing" | "paused" | "game-over";
 
 type Player = {
   x: number;
@@ -11,20 +11,20 @@ type Player = {
   health: number;
   onGround: boolean;
   facing: 1 | -1;
+  attackUntil: number;
 }
 
 
 const keysPressed = new Set<string>();
 
 window.addEventListener("keydown", (event) => {
-  keysPressed.add(event.key.toLowerCase());
+  const key = event.key.toLowerCase();
+  keysPressed.add(key);
 
-  if (
-    ["a", "d", "w", "arrowleft", "arrowright", "arrowup"].includes(key)
-  ) {
+  if (["a", "d", "w", "j", "i", "l", "f", "h"].includes(key)) {
     event.preventDefault();
   }
-})
+});
 
 window.addEventListener("keyup", (event) => {
   keysPressed.delete(event.key.toLowerCase());
@@ -34,11 +34,34 @@ window.addEventListener("keyup", (event) => {
 const canvas = document.querySelector<HTMLCanvasElement>("#game-canvas");
 const startOverlay = document.querySelector<HTMLElement>("#start-overlay");
 const pauseOverlay = document.querySelector<HTMLElement>("#pause-overlay");
-const status = document.querySelector<HTMLElement>("#game-status");
+const gameOverOverlay = document.querySelector<HTMLElement>("#game-over-overlay");
+const winnerMessage = document.querySelector<HTMLElement>("#winner-message");
+const status_1 = document.querySelector<HTMLElement>("#game-status");
 const startButton = document.querySelector<HTMLButtonElement>("#start-button");
 const resumeButton = document.querySelector<HTMLButtonElement>("#resume-button");
+const playAgainButton = document.querySelector<HTMLButtonElement>("#play-again-button");
 const pauseButton = document.querySelector<HTMLButtonElement>("#pause-button");
 const resetButton = document.querySelector<HTMLButtonElement>("#reset-button");
+const playerOneHealthBar = document.querySelector<HTMLElement>("#player-one-health");
+const playerTwoHealthBar = document.querySelector<HTMLElement>("#player-two-health");
+if (
+  !canvas ||
+  !startOverlay ||
+  !pauseOverlay ||
+  !gameOverOverlay ||
+  !winnerMessage ||
+  !status_1 ||
+  !startButton ||
+  !resumeButton ||
+  !playAgainButton ||
+  !pauseButton ||
+  !resetButton ||
+  !playerOneHealthBar ||
+  !playerTwoHealthBar
+) {
+  throw new Error("The game page is missing a required element.");
+}
+
 
 const playerOne: Player = {
   x: 250,
@@ -51,6 +74,7 @@ const playerOne: Player = {
   health: 100,
   onGround: true,
   facing: 1,
+  attackUntil: 0,
 };
 
 const playerTwo: Player = {
@@ -64,9 +88,10 @@ const playerTwo: Player = {
   health: 100,
   onGround: true,
   facing: -1,
+  attackUntil: 0,
 };
 
-if (!canvas || !startOverlay || !pauseOverlay || !status || !startButton || !resumeButton || !pauseButton || !resetButton) {
+if (!canvas || !startOverlay || !pauseOverlay || !status_1 || !startButton || !resumeButton || !pauseButton || !resetButton) {
   throw new Error("The game page is missing a required element.");
 }
 
@@ -83,12 +108,15 @@ let lastFrameTime = 0;
 function updateInterface(): void {
   startOverlay.hidden = state !== "ready";
   pauseOverlay.hidden = state !== "paused";
+  gameOverOverlay.hidden = state !== "game-over";
   pauseButton.textContent = state === "paused" ? "Resume" : "Pause";
+  pauseButton.disabled = state === "game-over";
 
-  status.textContent = {
+  status_1.textContent = {
     ready: "Ready to fight",
     playing: "Match in progress",
     paused: "Match paused",
+    "game-over": "Match finished",
   }[state];
 }
 
@@ -130,10 +158,25 @@ function drawPlayer(player: Player): void {
   context.lineCap = "round";
   context.lineJoin = "round";
 
-  // Head
+  // Head, with an eye and nose placed on the side the player faces.
   context.beginPath();
   context.arc(centerX, headY, 13, 0, Math.PI * 2);
   context.fill();
+
+  context.fillStyle = "#10131c";
+  context.beginPath();
+  context.arc(centerX + player.facing * 6, headY - 3, 2.5, 0, Math.PI * 2);
+  context.fill();
+  context.strokeStyle = "#10131c";
+  context.lineWidth = 3;
+  context.beginPath();
+  context.moveTo(centerX + player.facing * 11, headY + 2);
+  context.lineTo(centerX + player.facing * 17, headY + 4);
+  context.stroke();
+
+  context.strokeStyle = player.color;
+  context.fillStyle = player.color;
+  context.lineWidth = 8;
 
   // Body
   context.beginPath();
@@ -141,20 +184,24 @@ function drawPlayer(player: Player): void {
   context.lineTo(centerX, hipY);
   context.stroke();
 
-  // Arms
-  drawLimb(
-    centerX,
-    shoulderY,
-    centerX + player.facing * (24 + armSwing),
-    shoulderY + 18,
-  );
+  // The front arm extends for a short time when punching.
+  const isPunching = performance.now() < player.attackUntil;
+  const frontHandX = centerX + player.facing * (isPunching ? 68 : 24 + armSwing);
+  const frontHandY = shoulderY + (isPunching ? 4 : 18);
 
+  drawLimb(centerX, shoulderY, frontHandX, frontHandY);
   drawLimb(
     centerX,
     shoulderY,
     centerX - player.facing * (20 + armSwing),
     shoulderY + 25,
   );
+
+  if (isPunching) {
+    context.beginPath();
+    context.arc(frontHandX, frontHandY, 7, 0, Math.PI * 2);
+    context.fill();
+  }
 
   // Legs
   drawLimb(
@@ -178,14 +225,70 @@ const floorY = canvas.height * 0.78;
 const gravity = 0.7;
 const jumpStrength = -16;
 
-function punch(attacker: Player, victim: Player): void {
-  // if playerOne is next to playerTwo and playerOne does a punch attack while facing player two,
-  // register as a hit with a punch animation and a decrease two playerTwo health
-  if (Math.abs(attacker.x - victim.x) < 10) {
-    if ((attacker.facing === 1 && attacker.x > victim.x) || attacker.facing === -1 && attacker.x < victim.x) {
-      victim.health -= 10;
-    }
+function damagePlayer(player: Player, amount: number): void {
+  player.health = Math.max(0, player.health - amount);
+  updateHealthBars();
+
+  if (player.health === 0) {
+    endMatch(player);
   }
+}
+
+function endMatch(loser: Player): void {
+  const winner = loser === playerOne ? "Player 2" : "Player 1";
+
+  state = "game-over";
+  keysPressed.clear();
+  cancelAnimationFrame(animationFrameId ?? 0);
+  winnerMessage.textContent = `${winner} wins the match!`;
+  updateInterface();
+  drawArena();
+}
+
+function punch(attacker: Player, victim: Player): void {
+  const now = performance.now();
+  const punchDuration = 180;
+
+  // A player cannot begin another punch until this animation finishes.
+  if (now < attacker.attackUntil) return;
+  attacker.attackUntil = now + punchDuration;
+
+  const attackerCenterX = attacker.x + attacker.width / 2;
+  const victimCenterX = victim.x + victim.width / 2;
+  const victimIsInFront =
+    attacker.facing === 1
+      ? victimCenterX >= attackerCenterX
+      : victimCenterX <= attackerCenterX;
+
+  // These match the visible extended arm and the victim's drawn torso.
+  const fistX = attackerCenterX + attacker.facing * 68;
+  const fistY = attacker.y + 42;
+  const fistRadius = 7;
+  const attackLeft = Math.min(attackerCenterX, fistX) - fistRadius;
+  const attackRight = Math.max(attackerCenterX, fistX) + fistRadius;
+  const victimBodyLeft = victim.x + 10;
+  const victimBodyRight = victim.x + victim.width - 10;
+  const victimBodyTop = victim.y + 30;
+  const victimBodyBottom = victim.y + 75;
+
+  const punchOverlapsBodyHorizontally =
+    attackRight >= victimBodyLeft && attackLeft <= victimBodyRight;
+  const punchOverlapsBodyVertically =
+    fistY + fistRadius >= victimBodyTop &&
+    fistY - fistRadius <= victimBodyBottom;
+
+  if (
+    victimIsInFront &&
+    punchOverlapsBodyHorizontally &&
+    punchOverlapsBodyVertically
+  ) {
+    damagePlayer(victim, 10);
+  }
+}
+
+function updateHealthBars(): void {
+  playerOneHealthBar.style.width = `${playerOne.health}%`;
+  playerTwoHealthBar.style.width = `${playerTwo.health}%`;
 }
 
 function updatePlayerPhysics(player: Player): void {
@@ -225,11 +328,6 @@ function updatePlayers(): void {
   if (keysPressed.has("w") && playerOne.onGround) {
     playerOne.velocityY = jumpStrength;
     playerOne.onGround = false;
-  }
-
-  // Player 1: punch the enemy
-  if (keysPressed.has("f")) {
-    punch(playerOne, playerTwo)
   }
 
   // Player 2: left/right movement
@@ -295,6 +393,7 @@ function gameLoop(timestamp: number): void {
   lastFrameTime = timestamp;
 
   updatePlayers();
+  updateHealthBars();
   drawArena();
 
   if (state === "playing") {
@@ -320,13 +419,37 @@ function pauseMatch(): void {
 
 function resetMatch(): void {
   cancelAnimationFrame(animationFrameId ?? 0);
+
+  playerOne.health = 100;
+  playerTwo.health = 100;
+  playerOne.x = 250;
+  playerTwo.x = 950;
+  playerOne.y = floorY - playerOne.height;
+  playerTwo.y = floorY - playerTwo.height;
+  playerOne.velocityX = 0;
+  playerTwo.velocityX = 0;
+  playerOne.velocityY = 0;
+  playerTwo.velocityY = 0;
+  playerOne.onGround = true;
+  playerTwo.onGround = true;
+  playerOne.facing = 1;
+  playerTwo.facing = -1;
+  playerOne.attackUntil = 0;
+  playerTwo.attackUntil = 0;
+  keysPressed.clear();
+
   state = "ready";
   updateInterface();
+  updateHealthBars();
   drawArena();
 }
 
 startButton.addEventListener("click", startMatch);
 resumeButton.addEventListener("click", startMatch);
+playAgainButton.addEventListener("click", () => {
+  resetMatch();
+  startMatch();
+});
 pauseButton.addEventListener("click", () => {
   if (state === "playing") pauseMatch();
   else if (state === "paused") startMatch();
@@ -334,11 +457,20 @@ pauseButton.addEventListener("click", () => {
 resetButton.addEventListener("click", resetMatch);
 
 window.addEventListener("keydown", (event) => {
-  if (event.key === "Escape") {
+  const key = event.key.toLowerCase();
+
+  if (key === "escape") {
     if (state === "playing") pauseMatch();
     else if (state === "paused") startMatch();
+    return;
   }
+
+  if (event.repeat || state !== "playing") return;
+
+  if (key === "f") punch(playerOne, playerTwo);
+  if (key === "h") punch(playerTwo, playerOne);
 });
 
 updateInterface();
+updateHealthBars();
 drawArena();

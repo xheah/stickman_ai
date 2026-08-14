@@ -66,7 +66,7 @@
             <button id="start-button" class="primary-button" type="button">Start match</button>
             <div class="controls">
               <div class="control-card"><strong>Player 1</strong><br /><kbd>A</kbd> <kbd>D</kbd> move · <kbd>W</kbd> jump · <kbd>F</kbd> attack</div>
-              <div class="control-card"><strong>Player 2</strong><br /><kbd>←</kbd> <kbd>→</kbd> move · <kbd>↑</kbd> jump · <kbd>/</kbd> attack</div>
+              <div class="control-card"><strong>Player 2</strong><br /><kbd>J</kbd> <kbd>L</kbd> move · <kbd>I</kbd> jump · <kbd>H</kbd> attack</div>
             </div>
           </div>
         </div>
@@ -76,6 +76,14 @@
             <h2>Paused</h2>
             <p>Press <kbd>Escape</kbd> or choose resume to continue.</p>
             <button id="resume-button" class="primary-button" type="button">Resume</button>
+          </div>
+        </div>
+
+        <div id="game-over-overlay" class="overlay" hidden>
+          <div class="panel">
+            <h2>Game over</h2>
+            <p id="winner-message" aria-live="assertive"></p>
+            <button id="play-again-button" class="primary-button" type="button">Play again</button>
           </div>
         </div>
       </section>
